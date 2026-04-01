@@ -9,8 +9,8 @@
       --bg: #f5f7fb;
       --card: #ffffff;
       --text: #1f2937;
-      --muted: #6b7280;
-      --line: #dbe2ea;
+      --muted: #6b7281;
+      --line: #dbe3ea;
       --accent: #1f4e79;
       --danger: #b42318;
       --success: #067647;
@@ -37,7 +37,7 @@
 
     .grid {
       display: grid;
-      grid-template-columns: 0.9fr 1.35fr;
+      grid-template-columns: 1fr 1.25fr;
       gap: 20px;
       align-items: start;
     }
@@ -64,30 +64,13 @@
       font-size: 0.95rem;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th, td {
-      padding: 10px 8px;
-      border-bottom: 1px solid var(--line);
-      text-align: left;
-      vertical-align: top;
-    }
-
-    th {
-      font-size: 0.93rem;
-      color: var(--muted);
-      font-weight: 700;
-    }
-
     input, select, textarea, button {
       font: inherit;
     }
 
     input[type="date"],
     input[type="number"],
+    input[type="text"],
     textarea {
       width: 100%;
       padding: 10px 12px;
@@ -258,12 +241,6 @@
       border: 1px solid #abefc6;
     }
 
-    .footer-note {
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
     .subtle-box {
       border: 1px dashed #c9d3de;
       border-radius: 12px;
@@ -282,7 +259,6 @@
     }
 
     .result-line {
-      font-family: Arial, Helvetica, sans-serif;
       font-size: 1rem;
       background: #fff;
       border: 1px solid #c9d3de;
@@ -290,6 +266,64 @@
       padding: 12px;
       word-break: break-word;
       margin-bottom: 10px;
+    }
+
+    .bottom-tools {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 999;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal {
+      width: min(980px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+      border: 1px solid var(--line);
+      padding: 18px;
+    }
+
+    .modal-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    .modal-table th, .modal-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .modal-table th {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
     }
 
     @media (max-width: 980px) {
@@ -301,6 +335,7 @@
     @media (max-width: 640px) {
       .wrap { padding: 14px; }
       .machine-count-grid { grid-template-columns: 1fr; }
+      .modal-table th:nth-child(3), .modal-table td:nth-child(3) { display: none; }
     }
   </style>
 </head>
@@ -308,7 +343,7 @@
   <div class="wrap">
     <div class="intro">
       <h1>Electricity Usage Calculator</h1>
-      <p class="small">Built around your fixed machine list. Enter each equipment change date and the machines in place at completion of works on that day.</p>
+      <p class="small">Enter each equipment change date and the machines in place at completion of works on that day.</p>
     </div>
 
     <div class="grid">
@@ -316,27 +351,7 @@
         <div class="card">
           <div class="section-head">
             <div>
-              <h2>1. Built-in machine rates</h2>
-              <p class="small">These are fixed for now. Editing can be added later.</p>
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th style="width:72%">Machine type</th>
-                <th style="width:28%">Usage per day</th>
-              </tr>
-            </thead>
-            <tbody id="machineTableBody"></tbody>
-          </table>
-          <div class="footer-note">All calculations are based on whole days only.</div>
-        </div>
-
-        <div class="card" style="margin-top:20px;">
-          <div class="section-head">
-            <div>
-              <h2>2. Equipment changes</h2>
+              <h2>Equipment changes</h2>
               <p class="small">Each new row starts by copying the previous machine quantities. Use <strong>Remove all</strong> for the final removal date.</p>
             </div>
             <button type="button" class="secondary" id="addChangeBtn">Add change date</button>
@@ -347,6 +362,10 @@
           <div class="subtle-box">
             The final change date should usually show all machine quantities as 0, so the calculation has a clear finish date.
           </div>
+
+          <div class="bottom-tools">
+            <button type="button" class="ghost" id="editEquipmentBtn">Edit equipment list for this page load</button>
+          </div>
         </div>
       </div>
 
@@ -354,7 +373,7 @@
         <div class="card">
           <div class="section-head">
             <div>
-              <h2>3. Results</h2>
+              <h2>Results</h2>
               <p class="small">Calculate total usage and generate copy-ready outputs.</p>
             </div>
           </div>
@@ -409,6 +428,41 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="equipmentModalBackdrop">
+    <div class="modal">
+      <div class="section-head">
+        <div>
+          <h2>Edit equipment list</h2>
+          <p class="small">These changes apply only for this page load. Refreshing the page will restore the default equipment list.</p>
+        </div>
+        <button type="button" class="danger" id="closeEquipmentModalTop">Close</button>
+      </div>
+
+      <table class="modal-table">
+        <thead>
+          <tr>
+            <th style="width:52%">Equipment name</th>
+            <th style="width:24%">Usage per day</th>
+            <th style="width:14%">Unit</th>
+            <th style="width:10%"></th>
+          </tr>
+        </thead>
+        <tbody id="equipmentEditorBody"></tbody>
+      </table>
+
+      <div class="modal-actions">
+        <div class="btn-row">
+          <button type="button" class="secondary" id="addEquipmentRowBtn">Add equipment</button>
+          <button type="button" class="ghost" id="resetEquipmentBtn">Reset to default list</button>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="secondary" id="cancelEquipmentBtn">Cancel</button>
+          <button type="button" id="saveEquipmentBtn">Save equipment list</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <template id="changeTemplate">
     <div class="change-card">
       <div class="change-head">
@@ -435,21 +489,22 @@
   <script>
     const ELECTRICITY_RATE = 0.29;
 
-    const MACHINES = [
-      { name: 'Sahara', ratePerDay: 11.28 },
-      { name: 'Velo', ratePerDay: 2.88 },
-      { name: 'Axial', ratePerDay: 4.56 },
-      { name: 'Dri-Pod', ratePerDay: 3.36 },
-      { name: 'BD2500', ratePerDay: 18.72 },
-      { name: 'Midas (black dehum)', ratePerDay: 20.64 },
-      { name: 'Trotec Qube (yellow dehum)', ratePerDay: 9.84 },
-      { name: 'Dri-Eaz DrizAir 2000 (blue upright dehum)', ratePerDay: 22.06 },
-      { name: 'Heylo Air Scrubber (orange AFD)', ratePerDay: 4.32 },
-      { name: 'Drieaz Defender (blue AFD)', ratePerDay: 9.84 },
-      { name: 'Drymatic Heat (boost bar?)', ratePerDay: 43.2 }
+    const DEFAULT_MACHINES = [
+      { name: 'Sahara', ratePerDay: 11.28, unit: 'kWh/day' },
+      { name: 'Velo', ratePerDay: 2.88, unit: 'kWh/day' },
+      { name: 'Axial', ratePerDay: 4.56, unit: 'kWh/day' },
+      { name: 'Dri-Pod', ratePerDay: 3.36, unit: 'kWh/day' },
+      { name: 'BD2500', ratePerDay: 18.72, unit: 'kWh/day' },
+      { name: 'Midas (black dehum)', ratePerDay: 20.64, unit: 'kWh/day' },
+      { name: 'Trotec Qube (yellow dehum)', ratePerDay: 9.84, unit: 'kWh/day' },
+      { name: 'Dri-Eaz DrizAir 2000 (blue upright dehum)', ratePerDay: 22.06, unit: 'kWh/day' },
+      { name: 'Heylo Air Scrubber (orange AFD)', ratePerDay: 4.32, unit: 'kWh/day' },
+      { name: 'Drieaz Defender (blue AFD)', ratePerDay: 9.84, unit: 'kWh/day' },
+      { name: 'Drymatic Heat (boost bar?)', ratePerDay: 43.2, unit: 'kWh/day' }
     ];
 
-    const machineTableBody = document.getElementById('machineTableBody');
+    let machines = JSON.parse(JSON.stringify(DEFAULT_MACHINES));
+
     const changesContainer = document.getElementById('changesContainer');
     const changeTemplate = document.getElementById('changeTemplate');
     const messageBox = document.getElementById('messageBox');
@@ -459,6 +514,9 @@
     const totalOnlyOutput = document.getElementById('totalOnlyOutput');
     const costOutput = document.getElementById('costOutput');
     const summaryOutput = document.getElementById('summaryOutput');
+
+    const equipmentModalBackdrop = document.getElementById('equipmentModalBackdrop');
+    const equipmentEditorBody = document.getElementById('equipmentEditorBody');
 
     const ordinalWords = [
       'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth',
@@ -491,6 +549,17 @@
       });
     }
 
+    function formatNaturalDate(dateStr) {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      return date.toLocaleDateString('en-AU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC'
+      });
+    }
+
     function getOrdinalLabel(index) {
       return ordinalWords[index] || `${index + 1}th`;
     }
@@ -517,18 +586,6 @@
       summaryOutput.value = '';
     }
 
-    function renderMachineTable() {
-      machineTableBody.innerHTML = '';
-      MACHINES.forEach(machine => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${machine.name}</td>
-          <td>${formatNumber(machine.ratePerDay, 2)} kWh/day</td>
-        `;
-        machineTableBody.appendChild(tr);
-      });
-    }
-
     function refreshChangeTitles() {
       [...changesContainer.querySelectorAll('.change-card')].forEach((card, index) => {
         card.querySelector('.change-title').textContent = `Equipment Change ${index + 1}`;
@@ -547,7 +604,7 @@
 
       wrapper.innerHTML = `
         <label class="qty-label">${machine.name}</label>
-        <span class="qty-rate">${formatNumber(machine.ratePerDay, 2)} kWh/day each</span>
+        <span class="qty-rate">${formatNumber(machine.ratePerDay, 2)} ${machine.unit || 'kWh/day'} each</span>
         <div class="qty-inline">
           <button type="button" class="ghost mini qty-down">−</button>
           <select class="machine-qty-input" data-machine-name="${machine.name}">
@@ -580,7 +637,7 @@
         const grid = card.querySelector('.change-machine-count-grid');
         grid.innerHTML = '';
 
-        MACHINES.forEach(machine => {
+        machines.forEach(machine => {
           const previous = existingValues[machine.name] ?? 0;
           grid.appendChild(createCountField(machine, previous));
         });
@@ -626,6 +683,8 @@
           input.value = String(Math.max(0, Math.min(20, Number(incoming) || 0)));
         });
       }
+
+      insertedCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function addCopiedChange() {
@@ -636,7 +695,7 @@
       const lines = [];
       lines.push(`The total electricity used was ${formatNumber(result.totalKwh, 2)} kWh.`);
       lines.push('');
-      lines.push(`At $${ELECTRICITY_RATE.toFixed(2)} per kWh, the total electricity cost was ${formatCurrency(result.totalCost)}.`);
+      lines.push(`${formatNumber(result.totalKwh, 2)} kWh total x $${ELECTRICITY_RATE.toFixed(2)}/kWh = ${formatCurrency(result.totalCost)}`);
       lines.push('');
       lines.push('Calculations:');
 
@@ -646,7 +705,7 @@
           : 'No machines';
 
         lines.push(
-          `${getOrdinalLabel(index)} Drying Period (${period.days} ${period.days === 1 ? 'day' : 'days'}): ${machineText} from ${period.startDisplay} to ${period.endDisplay} for a total of approximately ${formatNumber(period.kwh, 2)} kWh.`
+          `${getOrdinalLabel(index)} Drying Period (${period.days} ${period.days === 1 ? 'day' : 'days'}): ${machineText} from ${period.startDisplay} to ${period.endDisplay} for a total of ${formatNumber(period.kwh, 2)} kWh.`
         );
       });
 
@@ -664,6 +723,11 @@
     function calculate() {
       clearMessage();
       const changeCards = [...changesContainer.querySelectorAll('.change-card')];
+
+      if (!machines.length) {
+        showMessage('Add at least one piece of equipment before calculating.', 'error');
+        return;
+      }
 
       if (changeCards.length < 2) {
         showMessage('Enter at least two change dates so the calculator has a start and finish.', 'error');
@@ -705,7 +769,7 @@
         totalDays: 0,
         totalCost: 0,
         periods: [],
-        byMachine: MACHINES.map(m => ({ name: m.name, kwh: 0 })),
+        byMachine: machines.map(m => ({ name: m.name, kwh: 0 })),
       };
 
       for (let i = 0; i < changes.length - 1; i++) {
@@ -721,7 +785,7 @@
         let periodKwh = 0;
         const machineBreakdown = [];
 
-        MACHINES.forEach((machine, machineIndex) => {
+        machines.forEach((machine, machineIndex) => {
           const qty = Number(current.quantities[machine.name]) || 0;
           const machineKwh = qty * machine.ratePerDay * days;
 
@@ -740,8 +804,8 @@
         result.totalKwh += periodKwh;
         result.totalDays += days;
         result.periods.push({
-          startDisplay: current.date,
-          endDisplay: next.date,
+          startDisplay: formatNaturalDate(current.date),
+          endDisplay: formatNaturalDate(next.date),
           days,
           kwh: periodKwh,
           machineBreakdown,
@@ -754,7 +818,7 @@
       periodCountEl.textContent = result.periods.length;
       totalDaysEl.textContent = formatNumber(result.totalDays, 0);
       totalOnlyOutput.textContent = `${formatNumber(result.totalKwh, 2)} kWh`;
-      costOutput.textContent = `${formatNumber(result.totalKwh, 2)} kWh × $${ELECTRICITY_RATE.toFixed(2)}/kWh = ${formatCurrency(result.totalCost)}`;
+      costOutput.textContent = `${formatNumber(result.totalKwh, 2)} kWh total x $${ELECTRICITY_RATE.toFixed(2)}/kWh = ${formatCurrency(result.totalCost)}`;
       summaryOutput.value = buildSummary(result);
       showMessage('Calculation complete.', 'success');
     }
@@ -770,6 +834,79 @@
       } catch (err) {
         showMessage('Copy failed. You can still select and copy the text manually.', 'error');
       }
+    }
+
+    function openEquipmentModal() {
+      equipmentEditorBody.innerHTML = '';
+      machines.forEach(machine => addEquipmentEditorRow(machine));
+      equipmentModalBackdrop.classList.add('open');
+    }
+
+    function closeEquipmentModal() {
+      equipmentModalBackdrop.classList.remove('open');
+    }
+
+    function addEquipmentEditorRow(machine = { name: '', ratePerDay: '', unit: 'kWh/day' }) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" class="editor-name" value="${machine.name ?? ''}" /></td>
+        <td><input type="number" class="editor-rate" min="0" step="0.01" value="${machine.ratePerDay ?? ''}" /></td>
+        <td><input type="text" class="editor-unit" value="${machine.unit ?? 'kWh/day'}" /></td>
+        <td><button type="button" class="danger editor-remove-row">Remove</button></td>
+      `;
+      tr.querySelector('.editor-remove-row').addEventListener('click', () => tr.remove());
+      equipmentEditorBody.appendChild(tr);
+    }
+
+    function saveEquipmentList() {
+      const rows = [...equipmentEditorBody.querySelectorAll('tr')];
+      const updatedMachines = [];
+
+      for (const row of rows) {
+        const name = row.querySelector('.editor-name').value.trim();
+        const ratePerDay = parseFloat(row.querySelector('.editor-rate').value);
+        const unit = row.querySelector('.editor-unit').value.trim() || 'kWh/day';
+
+        if (!name) continue;
+
+        if (!Number.isFinite(ratePerDay) || ratePerDay < 0) {
+          showMessage(`Enter a valid usage per day for ${name || 'each equipment item'}.`, 'error');
+          return;
+        }
+
+        updatedMachines.push({ name, ratePerDay, unit });
+      }
+
+      if (!updatedMachines.length) {
+        showMessage('Leave at least one piece of equipment in the list.', 'error');
+        return;
+      }
+
+      const oldQuantitiesByCard = [...changesContainer.querySelectorAll('.change-card')].map(card => {
+        const values = {};
+        card.querySelectorAll('.machine-qty-input').forEach(input => {
+          values[input.dataset.machineName] = Number(input.value) || 0;
+        });
+        return values;
+      });
+
+      machines = updatedMachines;
+      refreshChangeMachineInputs();
+
+      [...changesContainer.querySelectorAll('.change-card')].forEach((card, cardIndex) => {
+        const oldValues = oldQuantitiesByCard[cardIndex] || {};
+        card.querySelectorAll('.machine-qty-input').forEach(input => {
+          input.value = String(Math.max(0, Math.min(20, Number(oldValues[input.dataset.machineName]) || 0)));
+        });
+      });
+
+      closeEquipmentModal();
+      showMessage('Equipment list updated for this page load.', 'success');
+    }
+
+    function resetEquipmentEditorToDefault() {
+      equipmentEditorBody.innerHTML = '';
+      DEFAULT_MACHINES.forEach(machine => addEquipmentEditorRow(machine));
     }
 
     function loadExample() {
@@ -802,7 +939,7 @@
         'Drymatic Heat (boost bar?)': 0
       });
 
-      resetOutputs()
+      resetOutputs();
       clearMessage();
       showMessage('Example loaded. Click Calculate to test it.', 'success');
     }
@@ -814,20 +951,20 @@
     document.getElementById('copyCostBtn').addEventListener('click', () => copyText(costOutput.textContent, 'Total with cost copied to clipboard.'));
     document.getElementById('copySummaryBtn').addEventListener('click', () => copyText(summaryOutput.value, 'Full summary copied to clipboard.'));
 
-    renderMachineTable();
-    addChange('', {
-      'Sahara': 0,
-      'Velo': 0,
-      'Axial': 0,
-      'Dri-Pod': 0,
-      'BD2500': 0,
-      'Midas (black dehum)': 0,
-      'Trotec Qube (yellow dehum)': 0,
-      'Dri-Eaz DrizAir 2000 (blue upright dehum)': 0,
-      'Heylo Air Scrubber (orange AFD)': 0,
-      'Drieaz Defender (blue AFD)': 0,
-      'Drymatic Heat (boost bar?)': 0
+    document.getElementById('editEquipmentBtn').addEventListener('click', openEquipmentModal);
+    document.getElementById('closeEquipmentModalTop').addEventListener('click', closeEquipmentModal);
+    document.getElementById('cancelEquipmentBtn').addEventListener('click', closeEquipmentModal);
+    document.getElementById('addEquipmentRowBtn').addEventListener('click', () => addEquipmentEditorRow());
+    document.getElementById('saveEquipmentBtn').addEventListener('click', saveEquipmentList);
+    document.getElementById('resetEquipmentBtn').addEventListener('click', resetEquipmentEditorToDefault);
+
+    equipmentModalBackdrop.addEventListener('click', (event) => {
+      if (event.target === equipmentModalBackdrop) {
+        closeEquipmentModal();
+      }
     });
+
+    addChange('', {});
     resetOutputs();
   </script>
 </body>

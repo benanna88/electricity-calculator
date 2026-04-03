@@ -278,13 +278,18 @@
     .bottom-tools {
       margin-top: 16px;
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .next-date-row {
       margin-top: 14px;
       padding-top: 12px;
       border-top: 1px dashed var(--line);
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .boost-block {
@@ -404,17 +409,18 @@
           <div id="changesContainer"></div>
 
           <div class="subtle-box">
-            The final change date should usually show all machine quantities as 0, so the calculation has a clear finish date.
+            The final change date should usually show all equipment removed, so the calculation has a clear finish date.
           </div>
 
           <div class="bottom-tools">
+            <button type="button" id="calculateBottomBtn">Calculate</button>
             <button type="button" class="ghost" id="editEquipmentBtn">Edit equipment list for this page load</button>
           </div>
         </div>
       </div>
 
       <div>
-        <div class="card">
+        <div class="card" id="resultsCard">
           <div class="section-head">
             <div>
               <h2>Results</h2>
@@ -423,7 +429,7 @@
           </div>
 
           <div class="btn-row" style="margin-bottom:14px;">
-            <button type="button" id="calculateBtn">Calculate</button>
+            <button type="button" id="calculateTopBtn">Calculate</button>
             <button type="button" class="secondary" id="loadExampleBtn">Load example</button>
           </div>
 
@@ -530,6 +536,7 @@
 
         <div class="next-date-row">
           <button type="button" class="secondary add-next-btn">Add next date</button>
+          <button type="button" class="ghost calculate-here-btn">Calculate</button>
         </div>
       </div>
     </div>
@@ -548,7 +555,8 @@
       { name: 'Trotec Qube (yellow dehum)', ratePerDay: 9.84, unit: 'kWh/day' },
       { name: 'Dri-Eaz DrizAir 2000 (blue upright dehum)', ratePerDay: 22.06, unit: 'kWh/day' },
       { name: 'Heylo Air Scrubber (orange AFD)', ratePerDay: 4.32, unit: 'kWh/day' },
-      { name: 'Drieaz Defender (blue AFD)', ratePerDay: 9.84, unit: 'kWh/day' }
+      { name: 'Drieaz Defender (blue AFD)', ratePerDay: 9.84, unit: 'kWh/day' },
+      { name: 'Drymatic Heat (boost bar?)', ratePerDay: 43.2, unit: 'kWh/day' }
     ];
 
     let machines = JSON.parse(JSON.stringify(DEFAULT_MACHINES));
@@ -562,6 +570,7 @@
     const totalOnlyOutput = document.getElementById('totalOnlyOutput');
     const costOutput = document.getElementById('costOutput');
     const summaryOutput = document.getElementById('summaryOutput');
+    const resultsCard = document.getElementById('resultsCard');
 
     const equipmentModalBackdrop = document.getElementById('equipmentModalBackdrop');
     const equipmentEditorBody = document.getElementById('equipmentEditorBody');
@@ -645,13 +654,14 @@
         quantities[input.dataset.machineName] = Number(input.value) || 0;
       });
 
-      const boostManualEntries = [...card.querySelectorAll('.boost-manual-input')].map(input => input.value);
+      const boostRemovedEntries = [...card.querySelectorAll('.boost-removed-input')].map(input => input.value);
+      const boostAddedCount = Number(card.querySelector('.boost-added-count-input')?.value || 0);
 
       return {
         date: card.querySelector('.change-date')?.value || '',
         quantities,
-        boostCount: Number(card.querySelector('.boost-count-input')?.value || 0),
-        boostManualEntries,
+        boostRemovedEntries,
+        boostAddedCount,
         expanded: card.dataset.expanded === 'true'
       };
     }
@@ -665,9 +675,10 @@
       cards.forEach((card, index) => {
         card.querySelector('.change-title').textContent = `Equipment Change ${index + 1}`;
         const addNextBtn = card.querySelector('.add-next-btn');
-        if (addNextBtn) {
-          addNextBtn.style.display = index === cards.length - 1 ? 'inline-flex' : 'none';
-        }
+        const calcHereBtn = card.querySelector('.calculate-here-btn');
+        const isLast = index === cards.length - 1;
+        if (addNextBtn) addNextBtn.style.display = isLast ? 'inline-flex' : 'none';
+        if (calcHereBtn) calcHereBtn.style.display = isLast ? 'inline-flex' : 'none';
       });
     }
 
@@ -704,66 +715,103 @@
       return wrapper;
     }
 
-    function createBoostBlock(currentBoostCount = 0, prevBoostCount = 0, previousManualValues = []) {
-      const safeBoostCount = Math.max(0, Math.min(20, Number(currentBoostCount) || 0));
+    function createBoostBlock(carryCountBeforeCard = 0, state = {}) {
+      const boostAddedCount = Math.max(0, Math.min(20, Number(state.boostAddedCount) || 0));
+      const removedValues = state.boostRemovedEntries || [];
 
-      const options = Array.from({ length: 21 }, (_, i) => {
-        const selected = i === safeBoostCount ? 'selected' : '';
+      const addedOptions = Array.from({ length: 21 }, (_, i) => {
+        const selected = i === boostAddedCount ? 'selected' : '';
         return `<option value="${i}" ${selected}>${i}</option>`;
       }).join('');
 
       const container = document.createElement('div');
+
+      let carryHtml = '';
+      if (carryCountBeforeCard > 0) {
+        carryHtml += `
+          <div class="small" style="font-weight:700; margin-bottom:8px;">Boost Bar (manual kWh entry)</div>
+          <div class="small" style="margin-bottom:10px;">Enter the final kWh value for any manual boost bar removed on this date. Leave blank if that boost bar is still in play.</div>
+          <div class="boost-entry-grid">
+        `;
+
+        for (let i = 0; i < carryCountBeforeCard; i++) {
+          carryHtml += `
+            <div class="boost-entry">
+              <label>Boost Bar ${i + 1} removed on this date – final kWh</label>
+              <input type="number" class="boost-removed-input" min="0" step="0.01" value="${removedValues[i] ?? ''}" placeholder="Leave blank if still in play" />
+            </div>
+          `;
+        }
+
+        carryHtml += `</div>`;
+      }
+
       container.innerHTML = `
-        <div class="small" style="font-weight:700; margin-bottom:8px;">Boost Bar (manual kWh entry)</div>
-        <div class="qty-control">
-          <label class="qty-label">Boost bars in place at completion of works on this date</label>
-          <span class="qty-rate">Manual kWh entry required on the next change date when removed</span>
-          <div class="qty-inline">
-            <button type="button" class="ghost mini boost-down">−</button>
-            <select class="boost-count-input">${options}</select>
-            <button type="button" class="ghost mini boost-up">+</button>
+        ${carryHtml}
+        <div style="margin-top:${carryCountBeforeCard > 0 ? '14px' : '0'};">
+          <div class="qty-control">
+            <label class="qty-label">Additional manual boost bars added on this date</label>
+            <span class="qty-rate">These will carry forward to the next date until a final kWh value is entered</span>
+            <div class="qty-inline">
+              <button type="button" class="ghost mini boost-added-down">−</button>
+              <select class="boost-added-count-input">${addedOptions}</select>
+              <button type="button" class="ghost mini boost-added-up">+</button>
+            </div>
           </div>
         </div>
       `;
 
-      if (prevBoostCount > 0) {
-        const note = document.createElement('div');
-        note.className = 'small';
-        note.style.marginTop = '12px';
-        note.innerHTML = `Enter the final kWh reading for any boost bar removed on this date. Leave blank if that boost bar is still staying on site.`;
-        container.appendChild(note);
+      const select = container.querySelector('.boost-added-count-input');
+      const down = container.querySelector('.boost-added-down');
+      const up = container.querySelector('.boost-added-up');
 
-        const grid = document.createElement('div');
-        grid.className = 'boost-entry-grid';
+      down.addEventListener('click', () => {
+        select.value = String(Math.max(0, Number(select.value) - 1));
+        refreshAllCards();
+      });
 
-        for (let i = 0; i < prevBoostCount; i++) {
-          const box = document.createElement('div');
-          box.className = 'boost-entry';
-          box.innerHTML = `
-            <label>Boost Bar ${i + 1} kWh on this date</label>
-            <input type="number" class="boost-manual-input" min="0" step="0.01" value="${previousManualValues[i] ?? ''}" placeholder="Leave blank if still in use" />
-          `;
-          grid.appendChild(box);
-        }
+      up.addEventListener('click', () => {
+        select.value = String(Math.min(20, Number(select.value) + 1));
+        refreshAllCards();
+      });
 
-        container.appendChild(grid);
-      }
+      select.addEventListener('change', () => {
+        refreshAllCards();
+      });
+
+      container.querySelectorAll('.boost-removed-input').forEach(input => {
+        input.addEventListener('input', () => {
+          refreshAllCards();
+        });
+      });
 
       return container;
+    }
+
+    function computeCarryForwardCount(carryCountBeforeCard, removedEntryValues, boostAddedCount) {
+      let removedCount = 0;
+      for (let i = 0; i < carryCountBeforeCard; i++) {
+        const raw = removedEntryValues[i];
+        if (raw !== undefined && String(raw).trim() !== '') {
+          removedCount += 1;
+        }
+      }
+      const remaining = Math.max(0, carryCountBeforeCard - removedCount);
+      return remaining + Math.max(0, Number(boostAddedCount) || 0);
     }
 
     function refreshAllCards() {
       const cards = [...changesContainer.querySelectorAll('.change-card')];
       const states = cards.map(captureCardState);
 
-      let prevBoostCount = 0;
+      let carryCountBeforeCard = 0;
 
       cards.forEach((card, index) => {
         const state = states[index] || {
           date: '',
           quantities: {},
-          boostCount: 0,
-          boostManualEntries: [],
+          boostRemovedEntries: [],
+          boostAddedCount: 0,
           expanded: false
         };
 
@@ -776,25 +824,7 @@
 
         const boostBlock = card.querySelector('.change-boost-block');
         boostBlock.innerHTML = '';
-        boostBlock.appendChild(createBoostBlock(state.boostCount, prevBoostCount, state.boostManualEntries));
-
-        const boostSelect = card.querySelector('.boost-count-input');
-        const boostDown = card.querySelector('.boost-down');
-        const boostUp = card.querySelector('.boost-up');
-
-        boostDown.addEventListener('click', () => {
-          boostSelect.value = String(Math.max(0, Number(boostSelect.value) - 1));
-          refreshAllCards();
-        });
-
-        boostUp.addEventListener('click', () => {
-          boostSelect.value = String(Math.min(20, Number(boostSelect.value) + 1));
-          refreshAllCards();
-        });
-
-        boostSelect.addEventListener('change', () => {
-          refreshAllCards();
-        });
+        boostBlock.appendChild(createBoostBlock(carryCountBeforeCard, state));
 
         const dateInput = card.querySelector('.change-date');
         dateInput.value = state.date || '';
@@ -808,32 +838,29 @@
 
         if (state.date && state.expanded) {
           setCardExpanded(card, true);
-        } else if (state.date && !state.expanded && index === 0) {
+        } else if (state.date && index === 0) {
           setCardExpanded(card, true);
         } else {
           setCardExpanded(card, !!(state.date && state.expanded));
         }
 
-        prevBoostCount = Number(card.querySelector('.boost-count-input')?.value || 0);
+        const latestState = captureCardState(card);
+        carryCountBeforeCard = computeCarryForwardCount(
+          carryCountBeforeCard,
+          latestState.boostRemovedEntries,
+          latestState.boostAddedCount
+        );
       });
 
       refreshChangeTitles();
     }
 
-    function getLastChangeQuantities() {
+    function getLastChangeState() {
       const cards = [...changesContainer.querySelectorAll('.change-card')];
-      if (!cards.length) return { quantities: {}, boostCount: 0 };
-
-      const last = cards[cards.length - 1];
-      const quantities = {};
-      last.querySelectorAll('.machine-qty-input').forEach(input => {
-        quantities[input.dataset.machineName] = Number(input.value) || 0;
-      });
-
-      return {
-        quantities,
-        boostCount: Number(last.querySelector('.boost-count-input')?.value || 0)
-      };
+      if (!cards.length) {
+        return { quantities: {}, boostAddedCount: 0 };
+      }
+      return captureCardState(cards[cards.length - 1]);
     }
 
     function addChange(date = '', data = {}, options = {}) {
@@ -851,26 +878,25 @@
         card.querySelectorAll('.machine-qty-input').forEach(input => {
           input.value = '0';
         });
-
-        const boostSelect = card.querySelector('.boost-count-input');
-        if (boostSelect) boostSelect.value = '0';
-
-        const currentlyExpanded = card.dataset.expanded === 'true';
-        setCardExpanded(card, !currentlyExpanded);
+        const boostAddedSelect = card.querySelector('.boost-added-count-input');
+        if (boostAddedSelect) boostAddedSelect.value = '0';
         refreshAllCards();
+        setCardExpanded(card, true);
       });
 
       card.querySelector('.add-next-btn').addEventListener('click', () => {
         addCopiedChange();
       });
 
+      card.querySelector('.calculate-here-btn').addEventListener('click', () => {
+        calculateAndScroll();
+      });
+
       changesContainer.appendChild(fragment);
 
       const insertedCard = changesContainer.lastElementChild;
       insertedCard.querySelector('.change-date').value = date || '';
-
-      const initialExpanded = !!date;
-      setCardExpanded(insertedCard, initialExpanded);
+      setCardExpanded(insertedCard, !!date);
 
       refreshAllCards();
 
@@ -880,9 +906,18 @@
         });
       }
 
-      if (typeof data.boostCount !== 'undefined') {
-        const boostSelect = insertedCard.querySelector('.boost-count-input');
-        if (boostSelect) boostSelect.value = String(Math.max(0, Math.min(20, Number(data.boostCount) || 0)));
+      if (typeof data.boostAddedCount !== 'undefined') {
+        const boostAddedSelect = insertedCard.querySelector('.boost-added-count-input');
+        if (boostAddedSelect) {
+          boostAddedSelect.value = String(Math.max(0, Math.min(20, Number(data.boostAddedCount) || 0)));
+        }
+      }
+
+      if (Array.isArray(data.boostRemovedEntries)) {
+        const removedInputs = insertedCard.querySelectorAll('.boost-removed-input');
+        removedInputs.forEach((input, i) => {
+          input.value = data.boostRemovedEntries[i] ?? '';
+        });
       }
 
       refreshAllCards();
@@ -893,10 +928,10 @@
     }
 
     function addCopiedChange() {
-      const last = getLastChangeQuantities();
+      const last = getLastChangeState();
       addChange('', {
         quantities: last.quantities,
-        boostCount: last.boostCount
+        boostAddedCount: 0
       }, { scroll: true });
     }
 
@@ -917,8 +952,8 @@
           `${getOrdinalLabel(index)} Drying Period (${period.days} ${period.days === 1 ? 'day' : 'days'}): ${machineText} from ${period.startDisplay} to ${period.endDisplay} for a total of ${formatNumber(period.kwh, 2)} kWh.`
         );
 
-        if (period.boostManualTotal > 0) {
-          lines.push(`Boost Bar manual entries recorded on ${period.endDisplay}: ${formatNumber(period.boostManualTotal, 2)} kWh.`);
+        if (period.manualBoostRemovedTotal > 0) {
+          lines.push(`Manual boost bar entries recorded on ${period.endDisplay}: ${formatNumber(period.manualBoostRemovedTotal, 2)} kWh.`);
         }
       });
 
@@ -933,52 +968,88 @@
       return lines.join('\n');
     }
 
-    function calculate() {
+    function collectChangesForCalculation() {
+      const cards = [...changesContainer.querySelectorAll('.change-card')];
+      const changes = [];
+      let carryCountBeforeCard = 0;
+
+      for (let i = 0; i < cards.length; i++) {
+        const card = cards[i];
+        const state = captureCardState(card);
+
+        if (!state.date) {
+          throw new Error(`Enter a date for equipment change ${i + 1}.`);
+        }
+
+        const fixedEquipmentTotal = Object.values(state.quantities).reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+
+        const removedEntries = [];
+        let removedCount = 0;
+
+        for (let j = 0; j < carryCountBeforeCard; j++) {
+          const raw = state.boostRemovedEntries[j];
+          if (raw !== undefined && String(raw).trim() !== '') {
+            const num = Number(raw);
+            if (!Number.isFinite(num) || num < 0) {
+              throw new Error(`Enter a valid manual boost bar kWh value on equipment change ${i + 1}.`);
+            }
+            removedEntries.push(num);
+            removedCount += 1;
+          }
+        }
+
+        const boostAddedCount = Math.max(0, Number(state.boostAddedCount) || 0);
+        const carryCountAfterCard = Math.max(0, carryCountBeforeCard - removedCount) + boostAddedCount;
+
+        changes.push({
+          date: state.date,
+          quantities: state.quantities,
+          fixedEquipmentTotal,
+          boostAddedCount,
+          carryCountBeforeCard,
+          carryCountAfterCard,
+          removedEntries
+        });
+
+        carryCountBeforeCard = carryCountAfterCard;
+      }
+
+      return changes;
+    }
+
+    function calculateCore() {
       clearMessage();
 
       if (!machines.length) {
         showMessage('Add at least one piece of equipment before calculating.', 'error');
-        return;
+        return false;
       }
 
       const cards = [...changesContainer.querySelectorAll('.change-card')];
       if (cards.length < 2) {
         showMessage('Enter at least two change dates so the calculator has a start and finish.', 'error');
-        return;
+        return false;
       }
 
-      const changes = cards.map((card, index) => {
-        const date = card.querySelector('.change-date').value;
-        if (!date) throw new Error(`Enter a date for equipment change ${index + 1}.`);
-
-        const quantities = {};
-        card.querySelectorAll('.machine-qty-input').forEach(input => {
-          quantities[input.dataset.machineName] = Number(input.value) || 0;
-        });
-
-        const boostCount = Number(card.querySelector('.boost-count-input')?.value || 0);
-        const boostManualEntries = [...card.querySelectorAll('.boost-manual-input')]
-          .map(input => input.value.trim())
-          .filter(v => v !== '')
-          .map(v => Number(v))
-          .filter(v => Number.isFinite(v) && v >= 0);
-
-        return { date, quantities, boostCount, boostManualEntries };
-      });
+      let changes;
+      try {
+        changes = collectChangesForCalculation();
+      } catch (error) {
+        showMessage(error.message, 'error');
+        return false;
+      }
 
       for (let i = 1; i < changes.length; i++) {
         if (changes[i].date <= changes[i - 1].date) {
           showMessage('Each change date must be later than the previous one.', 'error');
-          return;
+          return false;
         }
       }
 
-      const finalFixedEquipment = Object.values(changes[changes.length - 1].quantities).reduce((sum, qty) => sum + qty, 0);
-      const finalBoostCount = changes[changes.length - 1].boostCount;
-
-      if (finalFixedEquipment !== 0 || finalBoostCount !== 0) {
-        showMessage('The final change date should have all equipment and boost bars set to 0.', 'error');
-        return;
+      const finalChange = changes[changes.length - 1];
+      if (finalChange.fixedEquipmentTotal !== 0 || finalChange.carryCountAfterCard !== 0) {
+        showMessage('The final change date should have all equipment and manual boost bars removed.', 'error');
+        return false;
       }
 
       const result = {
@@ -999,7 +1070,7 @@
 
         if (!Number.isFinite(days) || days <= 0) {
           showMessage(`Equipment change ${i + 1} must be followed by a later date.`, 'error');
-          return;
+          return false;
         }
 
         let periodKwh = 0;
@@ -1021,10 +1092,10 @@
           periodKwh += machineKwh;
         });
 
-        const boostManualTotal = next.boostManualEntries.reduce((sum, v) => sum + v, 0);
-        if (boostManualTotal > 0) {
-          result.byMachine[result.byMachine.length - 1].kwh += boostManualTotal;
-          periodKwh += boostManualTotal;
+        const manualBoostRemovedTotal = next.removedEntries.reduce((sum, value) => sum + value, 0);
+        if (manualBoostRemovedTotal > 0) {
+          result.byMachine[result.byMachine.length - 1].kwh += manualBoostRemovedTotal;
+          periodKwh += manualBoostRemovedTotal;
         }
 
         result.totalKwh += periodKwh;
@@ -1036,7 +1107,7 @@
           days,
           kwh: periodKwh,
           machineBreakdown,
-          boostManualTotal
+          manualBoostRemovedTotal
         });
       }
 
@@ -1049,6 +1120,14 @@
       costOutput.textContent = `${formatNumber(result.totalKwh, 2)} kWh total x $${ELECTRICITY_RATE.toFixed(2)}/kWh = ${formatCurrency(result.totalCost)}`;
       summaryOutput.value = buildSummary(result);
       showMessage('Calculation complete.', 'success');
+      return true;
+    }
+
+    function calculateAndScroll() {
+      const ok = calculateCore();
+      if (ok) {
+        resultsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
 
     async function copyText(text, successMessage) {
@@ -1146,9 +1225,10 @@
           'Trotec Qube (yellow dehum)': 0,
           'Dri-Eaz DrizAir 2000 (blue upright dehum)': 3,
           'Heylo Air Scrubber (orange AFD)': 0,
-          'Drieaz Defender (blue AFD)': 0
+          'Drieaz Defender (blue AFD)': 0,
+          'Drymatic Heat (boost bar?)': 1
         },
-        boostCount: 2
+        boostAddedCount: 2
       }, { scroll: false });
 
       addChange('2026-03-10', {
@@ -1162,16 +1242,12 @@
           'Trotec Qube (yellow dehum)': 0,
           'Dri-Eaz DrizAir 2000 (blue upright dehum)': 2,
           'Heylo Air Scrubber (orange AFD)': 0,
-          'Drieaz Defender (blue AFD)': 0
+          'Drieaz Defender (blue AFD)': 0,
+          'Drymatic Heat (boost bar?)': 1
         },
-        boostCount: 1
+        boostAddedCount: 1,
+        boostRemovedEntries: ['54.4', '']
       }, { scroll: false });
-
-      const cards = [...changesContainer.querySelectorAll('.change-card')];
-      if (cards[1]) {
-        const boostInputs = cards[1].querySelectorAll('.boost-manual-input');
-        if (boostInputs[0]) boostInputs[0].value = '54.4';
-      }
 
       addChange('2026-03-15', {
         quantities: {
@@ -1184,16 +1260,12 @@
           'Trotec Qube (yellow dehum)': 0,
           'Dri-Eaz DrizAir 2000 (blue upright dehum)': 0,
           'Heylo Air Scrubber (orange AFD)': 0,
-          'Drieaz Defender (blue AFD)': 0
+          'Drieaz Defender (blue AFD)': 0,
+          'Drymatic Heat (boost bar?)': 0
         },
-        boostCount: 0
+        boostAddedCount: 0,
+        boostRemovedEntries: ['63.2', '41.0']
       }, { scroll: false });
-
-      const latestCards = [...changesContainer.querySelectorAll('.change-card')];
-      if (latestCards[2]) {
-        const boostInputs = latestCards[2].querySelectorAll('.boost-manual-input');
-        if (boostInputs[0]) boostInputs[0].value = '63.2';
-      }
 
       resetOutputs();
       clearMessage();
@@ -1201,7 +1273,8 @@
     }
 
     document.getElementById('addChangeTopBtn').addEventListener('click', addCopiedChange);
-    document.getElementById('calculateBtn').addEventListener('click', calculate);
+    document.getElementById('calculateTopBtn').addEventListener('click', calculateAndScroll);
+    document.getElementById('calculateBottomBtn').addEventListener('click', calculateAndScroll);
     document.getElementById('loadExampleBtn').addEventListener('click', loadExample);
     document.getElementById('copyTotalBtn').addEventListener('click', () => copyText(totalOnlyOutput.textContent, 'Total copied to clipboard.'));
     document.getElementById('copyCostBtn').addEventListener('click', () => copyText(costOutput.textContent, 'Total with cost copied to clipboard.'));
@@ -1220,7 +1293,11 @@
       }
     });
 
-    addChange('', { quantities: {}, boostCount: 0 }, { scroll: false });
+    addChange('', {
+      quantities: {},
+      boostAddedCount: 0
+    }, { scroll: false });
+
     resetOutputs();
   </script>
 </body>
